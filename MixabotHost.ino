@@ -1,4 +1,3 @@
-
 #include <SparkFunESP8266WiFi.h>
 #include <Adafruit_MotorShield.h>
 #include "utility/Adafruit_MS_PWMServoDriver.h"
@@ -16,6 +15,7 @@ int csw_x_motion_pin = 22;
 int stepper_position = 0;
 int csw_z_motion_pin = 23;
 int hall_sensor_pin = 41;
+int ir_sensor_pin = A8;
 
 const double FULL_POUR_DURATION = 5.0;//seconds
 const double CHAMBER_REFILL_DURATION = 5.0;//seconds
@@ -23,6 +23,8 @@ const int POURER_BACKOFF_STEPS = 1000;//steps
 
 const double PANIC_STOP_ACCELERATION = 10000.0;
 const double NORMAL_ACCELERATION = 200.0;
+
+const int IR_SENSOR_THRESHOLD = 512;
 
 enum {
   WEBSERVER_SLOW_TIMEOUT_MSEC = 500,//milliseconds to wait on an incoming connection when nothing is going on
@@ -58,7 +60,21 @@ const String httpRequest = "GET / HTTP/1.1\n"
                            "Host: example.com\n"
                            "Connection: close\n\n";
 
-
+const String httpReply =
+"HTTP/1.1 200 OK\n"
+"Access-Control-Allow-Origin: *\n\n" 
+"{\n"
+  "\"drinks\": [\n"
+    "{\n"
+      "\"name\": \"Martinez\",\n"
+      "\"ingredients\": [\n"
+        "{\"name\": \"Gin\", \"quantity\": \"1.5 oz\"},\n"
+        "{\"name\": \"Vermouth\", \"quantity\": \"1.5 oz\"},\n"
+        "{\"name\": \"Maraschino\", \"quantity\": \"1 tsp\"}\n"
+      "]\n"
+    "},\n"
+  "]\n"
+"}\n\n";
 
                            
 Adafruit_MotorShield AFMS = Adafruit_MotorShield(); // Creates the motorshield object
@@ -115,9 +131,12 @@ unsigned int bottle_position_nsteps[6] = {
 
 
 
+
 void setup() {
   Serial.begin(9600);           // set up Serial library at 9600 bps
 
+  pinMode(A8, INPUT);
+  pinMode(hall_sensor_pin, INPUT);
   
   // Setup the motors
   AFMS.begin(); // setsup the motor code
@@ -144,6 +163,8 @@ void setup() {
   
   serialTrigger(F("Press any key to test server."));
   serverSetup();
+
+  do_homing();
 }
 
 
@@ -213,9 +234,12 @@ void do_safe_x_motor_move(int pos) {
 
 void do_homing() {
   if (!homing_complete) {
-    x_motor_profile.moveTo(-10000000);
-    while (digitalRead(csw_x_motion_pin)) {
-      runMotor(X_MOTOR, 0, 0);
+    Serial.println("Homing...");
+    if (digitalRead(csw_x_motion_pin)) {
+      x_motor_profile.moveTo(-10000000);
+      while (digitalRead(csw_x_motion_pin)) {
+        runMotor(X_MOTOR, 0, 0);
+      }
     }
     Serial.println("Homing Complete!");
     stepper_position = 0;
@@ -227,6 +251,9 @@ void do_homing() {
     }
     stepper_position = 10;
   }
+
+  homing_complete = false;
+  x_motor->release();
 }
 
 
@@ -247,6 +274,14 @@ void go_to_position(int pos) {
 
 //param portion Number of shots to pour
 void pour(double portion) {
+  int hall_sensor_active = !digitalRead(hall_sensor_pin);
+  if (!hall_sensor_active) {
+    Serial.println("Can't pour because there's no magnet at this location!");
+    //homing_complete = false;
+    //do_homing();
+    return;
+  }
+  
   Serial.println("Starting pour");
     while (portion > 0.0) {
       // Pourer motor calibrates
@@ -270,7 +305,14 @@ void pour(double portion) {
 
 // Create a drink based on positions of 4 potential mixes
 void martini() {
+  while (analogRead(ir_sensor_pin) > IR_SENSOR_THRESHOLD) {
+    Serial.println("Feed me a glass!");
+    //Set the LCD screen to "feed me a glass"
+  }
+  homing_complete = false;
   do_homing();
+  
+  //x_motor_profile.enableOutputs();
   go_to_position(BOTTLE_POS_1);
   pour(1);
   go_to_position(BOTTLE_POS_3);
@@ -439,6 +481,9 @@ void serverSetup()
   Serial.println();
 }
 
+void analyzeDrinkRequest(const char * drinkRequest) {
+  
+}
 
 void analyzeGetRequest(const char * getRequest) {
   Serial.println("Reprinting request:");
@@ -447,6 +492,7 @@ void analyzeGetRequest(const char * getRequest) {
   char * drink_request = strstr(getRequest, "GET /drinks/make");
   if (drink_request) {
     martini();
+    homing_complete = false;//Go back home now.
     Serial.println("Found a drink request!");
     drink_request = strstr(drink_request, "?");
     Serial.println(drink_request+1);
@@ -473,6 +519,9 @@ void serverDemo()
       if (found_string) {
         analyzeGetRequest(found_string);
       }
+
+      //Reply
+      client.print(httpReply);
       /*
       if (client.available()) 
       {
@@ -531,7 +580,7 @@ void serverDemo()
       }*/
     //}
     // give the web browser time to receive the data
-    delay(1000000);
+    delay(100);
     
     // close the connection:
     client.stop();
@@ -565,7 +614,7 @@ void serialTrigger(String message)
 
 void loop() {
   // Normal Drink Maker
-  do_homing();
+  //
 
   serverDemo();
 }
