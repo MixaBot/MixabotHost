@@ -319,6 +319,9 @@ void martini() {
   pour(1);
   go_to_position(BOTTLE_POS_5);
   pour(1);
+
+  homing_complete = false;
+  do_homing();
 }
 
 
