@@ -3,6 +3,7 @@
 #include "utility/Adafruit_MS_PWMServoDriver.h"
 #include <Wire.h>
 #include <AccelStepper.h>
+#include <LiquidCrystal.h>
 
 
 // Connect a stepper motor with 200 steps per revolution (1.8 degree)
@@ -76,6 +77,11 @@ const String httpReply =
   "]\n"
 "}\n\n";
 
+
+// initialize the library by associating any needed LCD interface pin
+// with the arduino pin number it is connected to
+const int rs = 26, en = 28, d4 = 30, d5 = 32, d6 = 34, d7 = 36;
+LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
                            
 Adafruit_MotorShield AFMS = Adafruit_MotorShield(); // Creates the motorshield object
 Adafruit_StepperMotor *x_motor= AFMS.getStepper(200, 2);
@@ -137,6 +143,11 @@ void setup() {
 
   pinMode(A8, INPUT);
   pinMode(hall_sensor_pin, INPUT);
+
+  // set up the LCD's number of columns and rows:
+  lcd.begin(16, 2);
+  // Startup message.
+  lcd.print("SirMixabot!");
   
   // Setup the motors
   AFMS.begin(); // setsup the motor code
