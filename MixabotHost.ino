@@ -4,7 +4,23 @@
 #include <Wire.h>
 #include <AccelStepper.h>
 #include <LiquidCrystal.h>
+#include <EEPROM.h>
 
+#define __ASSERT_USE_STDERR
+#include <assert.h>
+
+
+// handle diagnostic informations given by assertion and abort program execution:
+void __assert(const char *__func, const char *__file, int __lineno, const char *__sexp) {
+    // transmit diagnostic informations through serial link. 
+    Serial.println(__func);
+    Serial.println(__file);
+    Serial.println(__lineno, DEC);
+    Serial.println(__sexp);
+    Serial.flush();
+    // abort program execution.
+    abort();
+}
 
 // Connect a stepper motor with 200 steps per revolution (1.8 degree)
 // to motor port #2 (M3 and M4)
@@ -27,13 +43,14 @@ const double NORMAL_ACCELERATION = 200.0;
 
 const int IR_SENSOR_THRESHOLD = 512;
 
+
+
 enum {
-  WEBSERVER_SLOW_TIMEOUT_MSEC = 500,//milliseconds to wait on an incoming connection when nothing is going on
-  WEBSERVER_FAST_TIMEOUT_MSEC = 1,  //milliseconds to wait on an incoming connection when a motor is moving
-  WEBSERVER_TIMELINESS_CONST  = 200,//Number of steps between checking the web server. Adjust up to make motion smoother, adjust down to make server more responsive.
-  
+  EEPROM_INGREDIENT_NAME_SIZE = 32,
+  NUM_INGREDIENTS = 10,
 };
 
+char ingredients[NUM_INGREDIENTS][EEPROM_INGREDIENT_NAME_SIZE] = {0};
 
 //////////////////////////////
 // WiFi Network Definitions //
@@ -136,7 +153,38 @@ unsigned int bottle_position_nsteps[6] = {
     };
 
 
+void load_name_from_eeprom(int idx) {
+  assert(idx < NUM_INGREDIENTS);
+  for (int ii = 0; ii < EEPROM_INGREDIENT_NAME_SIZE; ii++) {
+    ingredients[idx][ii] = EEPROM[idx*EEPROM_INGREDIENT_NAME_SIZE + ii];
+  }
+}
 
+void store_name_to_eeprom(int idx) {
+  assert(idx < NUM_INGREDIENTS);
+  for (int ii = 0; ii < EEPROM_INGREDIENT_NAME_SIZE; ii++) {
+    EEPROM[idx*EEPROM_INGREDIENT_NAME_SIZE + ii] = ingredients[idx][ii];
+  }
+}
+
+void save_name_if_different(int idx, char * new_name) {
+  bool different = false;
+  for (int ii = 0; ii < EEPROM_INGREDIENT_NAME_SIZE; ii++) {
+    if (ingredients[idx][ii] != EEPROM[idx*EEPROM_INGREDIENT_NAME_SIZE + ii]) {
+      different = true;
+    }
+  }
+
+  if (different) {
+    store_name_to_eeprom(idx);
+  }
+}
+
+void load_all_names() {
+  for (int ii = 0; ii < NUM_INGREDIENTS; ii++) {
+    load_name_from_eeprom(ii);
+  }
+}
 
 void setup() {
   Serial.begin(9600);           // set up Serial library at 9600 bps
@@ -148,6 +196,8 @@ void setup() {
   lcd.begin(16, 2);
   // Startup message.
   lcd.print("SirMixabot!");
+
+  load_all_names();
   
   // Setup the motors
   AFMS.begin(); // setsup the motor code
@@ -316,9 +366,11 @@ void pour(double portion) {
 
 // Create a drink based on positions of 4 potential mixes
 void martini() {
+  if (analogRead(ir_sensor_pin) > IR_SENSOR_THRESHOLD) {
+    lcd.print("Feed me a glass!");
+  }
   while (analogRead(ir_sensor_pin) > IR_SENSOR_THRESHOLD) {
-    Serial.println("Feed me a glass!");
-    //Set the LCD screen to "feed me a glass"
+    //FIXME this is a bad idea.
   }
   homing_complete = false;
   do_homing();
@@ -499,17 +551,47 @@ void analyzeDrinkRequest(const char * drinkRequest) {
   
 }
 
-void analyzeGetRequest(const char * getRequest) {
+void analyzeIngredientPut(const char * ingredientPut) {
+  char token[4] = "p1=";
+  char ingredient_name[EEPROM_INGREDIENT_NAME_SIZE] = {0};
+
+  for (int ii = 0; ii < NUM_INGREDIENTS; ii++) {
+    token[1] = '1' + ii;
+    char * ingredient = strstr(ingredientPut, token);
+    if (ingredient) {
+      ingredient += sizeof(token) - 1;
+      char * string_end = strstr(ingredient, "&");
+      if (!string_end) {
+        string_end = strstr(ingredient, "\n");
+      }
+      if (string_end) {
+        strncpy(ingredient_name, ingredient, min(sizeof(ingredient_name) - 1, string_end - ingredient));
+        ingredient_name[sizeof(ingredient_name)-1] = 0;
+        Serial.print("Replacing position ");
+        Serial.print(ii+1);
+        Serial.print(" with the ingredient ");
+        Serial.println(ingredient_name);
+        save_name_if_different(ii, ingredient_name);
+      }
+    }
+  }
+}
+
+void analyzeGetRequest(const char * httpRequest) {
   Serial.println("Reprinting request:");
-  Serial.println(getRequest);
+  Serial.println(httpRequest);
   Serial.println("Request END");
-  char * drink_request = strstr(getRequest, "GET /drinks/make");
+  char * drink_request = strstr(httpRequest, "GET /drinks/make");
   if (drink_request) {
     martini();
     homing_complete = false;//Go back home now.
     Serial.println("Found a drink request!");
     drink_request = strstr(drink_request, "?");
     Serial.println(drink_request+1);
+  }
+  char * ingredient_put = strstr(httpRequest, "PUT /ingredients/p");
+  if (ingredient_put) {
+    analyzeIngredientPut(ingredient_put);
   }
 }
 
