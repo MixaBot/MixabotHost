@@ -188,7 +188,8 @@ void load_all_names() {
 
 void setup() {
   Serial.begin(9600);           // set up Serial library at 9600 bps
-
+Serial.println("Starting up...");
+Serial.flush();
   pinMode(A8, INPUT);
   pinMode(hall_sensor_pin, INPUT);
 
@@ -365,9 +366,10 @@ void pour(double portion) {
 }
 
 // Create a drink based on positions of 4 potential mixes
-void martini() {
+void dispenseIngredients(int *booze_positions, float *amounts, int num_ingredients) {
   if (analogRead(ir_sensor_pin) > IR_SENSOR_THRESHOLD) {
     lcd.print("Feed me a glass!");
+    Serial.println("Feed me a glass!");
   }
   while (analogRead(ir_sensor_pin) > IR_SENSOR_THRESHOLD) {
     //FIXME this is a bad idea.
@@ -376,12 +378,13 @@ void martini() {
   do_homing();
   
   //x_motor_profile.enableOutputs();
-  go_to_position(BOTTLE_POS_1);
-  pour(1);
-  go_to_position(BOTTLE_POS_3);
-  pour(1);
-  go_to_position(BOTTLE_POS_5);
-  pour(1);
+  int idx = 0; 
+  for (idx = 0; idx < num_ingredients; idx++) {
+    if ((booze_positions[idx]-1) != 6) {
+      go_to_position(booze_positions[idx] - 1);
+      pour(amounts[idx]);
+    }
+  }
 
   homing_complete = false;
   do_homing();
@@ -546,9 +549,8 @@ void serverSetup()
   Serial.println(esp8266.localIP());
   Serial.println();
 }
-
+/*
 void analyzeDrinkRequest(const char * drinkRequest) {
-  
 }
 
 void analyzeIngredientPut(const char * ingredientPut) {
@@ -577,22 +579,64 @@ void analyzeIngredientPut(const char * ingredientPut) {
   }
 }
 
+void analyzePutIngredient(const char * putIngredient) {
+  assert(putIngredient);
+  
+  Serial.print("PUT request: ");
+  Serial.println(putIngredient);
+
+  char * token = strtok(putIngredient, "/");
+
+  
+}*/
+
+void analyzeDrinkRequest(const char * drinkRequest) {
+  char * url = strstr(drinkRequest, "?");
+  url++;//skip the question mark
+  char * end_of_line = strstr(url, "\n");
+  end_of_line[1] = '\0';
+  char * tok = strtok(url, "p=&");
+  int token_num = 0;
+  int booze_positions[NUM_INGREDIENTS] = {0};
+  float amounts[NUM_INGREDIENTS] = {0.0};
+  int idx = 0;
+  while (tok) {
+    if (token_num++ % 2 == 0) {
+      int val = atoi(tok);
+      Serial.print("Dispensing position ");
+      Serial.print(val);
+      Serial.print(" - ");
+      booze_positions[idx] = val;
+    } else {
+      float val = atof(tok);
+      Serial.print(val);
+      Serial.println(" shots");
+      amounts[idx++] = val;
+      
+    }
+    tok = strtok(NULL, "p=&");
+  }
+
+  dispenseIngredients(booze_positions, amounts, idx);
+}
+
 void analyzeGetRequest(const char * httpRequest) {
   Serial.println("Reprinting request:");
   Serial.println(httpRequest);
   Serial.println("Request END");
-  char * drink_request = strstr(httpRequest, "GET /drinks/make");
+  char * drink_request = strstr(httpRequest, "GET /drinks/make?");
   if (drink_request) {
-    martini();
-    homing_complete = false;//Go back home now.
-    Serial.println("Found a drink request!");
-    drink_request = strstr(drink_request, "?");
-    Serial.println(drink_request+1);
+    analyzeDrinkRequest(drink_request);
+//    martini();
+//    homing_complete = false;//Go back home now.
+//    Serial.println("Found a drink request!");
+//    drink_request = strstr(drink_request, "?");
+//    Serial.println(drink_request+1);
   }
-  char * ingredient_put = strstr(httpRequest, "PUT /ingredients/p");
-  if (ingredient_put) {
-    analyzeIngredientPut(ingredient_put);
-  }
+//  char * ingredient_put = strstr(httpRequest, "PUT /ingredients/p");
+//  if (ingredient_put) {
+//    analyzeIngredientPut(ingredient_put);
+//  }
 }
 
 void serverDemo()
