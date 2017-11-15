@@ -176,6 +176,8 @@ void save_name_if_different(int idx, char * new_name) {
   }
 
   if (different) {
+    strncpy(ingredients[idx], new_name, EEPROM_INGREDIENT_NAME_SIZE - 1);
+    ingredients[idx][EEPROM_INGREDIENT_NAME_SIZE - 1] = '\0';
     store_name_to_eeprom(idx);
   }
 }
@@ -620,6 +622,33 @@ void analyzeDrinkRequest(const char * drinkRequest) {
   dispenseIngredients(booze_positions, amounts, idx);
 }
 
+void analyzeIngredientRequest(const char * ingredient_request) {
+  char * set_ingredient = strstr(ingredient_request, "GET /ingredients/p");
+  if (set_ingredient) {
+    Serial.println("Setting ingredient!");
+    set_ingredient = strstr(ingredient_request, "p");
+    char * ingredient_name;
+    int ingredient_position = strtol(set_ingredient + 1, &ingredient_name, 10);//p4, p10, etc...
+    if (ingredient_position != 0 && ingredient_position >= 1 && ingredient_position <= NUM_INGREDIENTS) {
+      ingredient_name++;//p1=vodka, etc...
+      char ingredient_name_safe[EEPROM_INGREDIENT_NAME_SIZE];
+      strncpy(ingredient_name_safe, ingredient_name, EEPROM_INGREDIENT_NAME_SIZE - 1);
+      ingredient_name_safe[EEPROM_INGREDIENT_NAME_SIZE - 1] = '\0';
+      Serial.print("Setting position ");
+      Serial.print(ingredient_position);
+      Serial.print(" to ingredient ");
+      Serial.println(ingredient_name_safe);
+      save_name_if_different(ingredient_position, ingredient_name_safe);
+    } else {
+      Serial.println("Illegal ingredient position:");
+      Serial.println(ingredient_request);
+      //FIXME finish
+    }
+  } else {//Get an ingredients list from arduino
+    
+  }
+}
+
 void analyzeGetRequest(const char * httpRequest) {
   Serial.println("Reprinting request:");
   Serial.println(httpRequest);
@@ -637,7 +666,18 @@ void analyzeGetRequest(const char * httpRequest) {
 //  if (ingredient_put) {
 //    analyzeIngredientPut(ingredient_put);
 //  }
+
+  char * ingredient_request = strstr(httpRequest, "GET /ingredients");
+  if (ingredient_request) {
+    analyzeIngredientRequest(ingredient_request);
+  }
 }
+
+
+//For getting a list of ingredients:
+//GET /ingredients
+//For setting an ingredient:
+//GET /ingredients/p1=vodka
 
 void serverDemo()
 {
