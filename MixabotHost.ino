@@ -10,6 +10,8 @@
 #include <assert.h>
 
 
+#define EPSILON 0.0000001
+
 // handle diagnostic informations given by assertion and abort program execution:
 void __assert(const char *__func, const char *__file, int __lineno, const char *__sexp) {
   Serial.println("ASSERTION FAILURE");
@@ -81,21 +83,15 @@ const String httpRequest = "GET / HTTP/1.1\n"
                            "Host: example.com\n"
                            "Connection: close\n\n";
 
-const String httpReply =
+const String http_OK = 
 "HTTP/1.1 200 OK\n"
-"Access-Control-Allow-Origin: *\n\n" 
-"{\n"
-  "\"drinks\": [\n"
-    "{\n"
-      "\"name\": \"Martinez\",\n"
-      "\"ingredients\": [\n"
-        "{\"name\": \"Gin\", \"quantity\": \"1.5 oz\"},\n"
-        "{\"name\": \"Vermouth\", \"quantity\": \"1.5 oz\"},\n"
-        "{\"name\": \"Maraschino\", \"quantity\": \"1 tsp\"}\n"
-      "]\n"
-    "},\n"
-  "]\n"
-"}\n\n";
+"Access-Control-Allow-Origin: *\n\n";
+
+const String http_ERROR =
+"HTTP/1.1 503 Service Unavailable\n"
+"Access-Control-Allow-Origin: *\n\n";
+
+String httpReply = http_OK;
 
 
 // initialize the library by associating any needed LCD interface pin
@@ -157,21 +153,21 @@ unsigned int bottle_position_nsteps[6] = {
 
 
 void load_name_from_eeprom(int idx) {
-  assert(idx <= NUM_INGREDIENTS);
+  assert(idx < NUM_INGREDIENTS && idx >= 0);
   for (int ii = 0; ii < EEPROM_INGREDIENT_NAME_SIZE; ii++) {
     ingredients[idx][ii] = EEPROM[idx*EEPROM_INGREDIENT_NAME_SIZE + ii];
   }
 }
 
 void store_name_to_eeprom(int idx) {
-  assert(idx <= NUM_INGREDIENTS);
+  assert(idx < NUM_INGREDIENTS && idx >= 0);
   for (int ii = 0; ii < EEPROM_INGREDIENT_NAME_SIZE; ii++) {
     EEPROM[idx*EEPROM_INGREDIENT_NAME_SIZE + ii] = ingredients[idx][ii];
   }
 }
 
 void save_name_if_different(int idx, char * new_name) {
-  assert(idx <= NUM_INGREDIENTS);
+  assert(idx < NUM_INGREDIENTS && idx >= 0);
 
   //No matter what, update our local RAM copy
   strncpy(ingredients[idx], new_name, EEPROM_INGREDIENT_NAME_SIZE - 1);
@@ -571,12 +567,40 @@ void analyzeDrinkRequest(const char * drinkRequest) {
   while (tok) {
     if (token_num++ % 2 == 0) {
       int val = atoi(tok);
+      if (val < 1 || val > NUM_INGREDIENTS) {
+        Serial.print("Parsed a nonsensical pour position number: ");
+        Serial.println(val);
+        Serial.print("From ");
+        Serial.println(tok);
+        httpReply = http_ERROR;
+        httpReply.concat(__FUNCTION__);
+        httpReply.concat("() - parsed a nonsensical pour position number ");
+        httpReply.concat(val);
+        httpReply.concat("\nOriginal string: ");
+        httpReply.concat(tok);
+        httpReply.concat("\n\n");
+        return;
+      }
       Serial.print("Dispensing position ");
       Serial.print(val);
       Serial.print(" - ");
       booze_positions[idx] = val;
     } else {
       float val = atof(tok);
+      if (val < EPSILON) {
+        Serial.print("Parsed a nonsensical pour amount: ");
+        Serial.println(val);
+        Serial.print("From: ");
+        Serial.println(tok);
+        httpReply = http_ERROR;
+        httpReply.concat(__FUNCTION__);
+        httpReply.concat("() - parsed a nonsensical pour amount ");
+        httpReply.concat(val);
+        httpReply.concat("\nOriginal string: ");
+        httpReply.concat(tok);
+        httpReply.concat("\n\n");
+        return;
+      }
       Serial.print(val);
       Serial.println(" shots");
       amounts[idx++] = val;
@@ -584,8 +608,9 @@ void analyzeDrinkRequest(const char * drinkRequest) {
     }
     tok = strtok(NULL, "p=& ");
   }
-
+  //FIXME send the client reply before moving, probably...
   dispenseIngredients(booze_positions, amounts, idx);
+  httpReply = http_OK;
 }
 
 void analyzeIngredientRequest(const char * ingredient_request) {
@@ -597,6 +622,9 @@ void analyzeIngredientRequest(const char * ingredient_request) {
     char * end_of_line = strstr(url, "\n");
     if (!end_of_line) {
       Serial.println("Got an HTTP request without a newline, bailing...");
+      httpReply = http_ERROR;
+      httpReply.concat(__FUNCTION__);
+      httpReply.concat("() - got an HTTP request without a newline, bailing...\n\n");
       return;
     }
     end_of_line[1] = '\0';//Don't let further string functions search past the newline
@@ -604,7 +632,7 @@ void analyzeIngredientRequest(const char * ingredient_request) {
     if (HTTP_version) {
       HTTP_version[0] = '\0';//Cut off the HTTP version if it exists.
     }
-    char * tok = strtok(url, "p=&");
+    char * tok = strtok(url, "=&");
     int token_num = 0;
     int booze_positions[NUM_INGREDIENTS] = {0};
     char * names[NUM_INGREDIENTS] = {NULL};
@@ -612,7 +640,21 @@ void analyzeIngredientRequest(const char * ingredient_request) {
     int idx = 0;
     while (tok) {
       if (token_num++ %2 == 0) {
-        int val = atoi(tok);
+        int val = atoi(tok+1);//don't try to use the p in p1, p3, p10, etc...
+        if (val < 1 || val > NUM_INGREDIENTS) {
+          Serial.print("Tried to parse nonsensical store ingredient position ");
+          Serial.println(val);
+          Serial.print("From original string ");
+          Serial.println(tok);
+          httpReply = http_ERROR;
+          httpReply.concat(__FUNCTION__);
+          httpReply.concat("() - tried to parse nonsensical store ingredient position ");
+          httpReply.concat(val);
+          httpReply.concat("\nFrom original string ");
+          httpReply.concat(tok);
+          httpReply.concat("\n\n");
+          return;
+        }
         Serial.print("Setting position ");
         Serial.print(val);
         Serial.print(" to ");
@@ -640,12 +682,27 @@ void analyzeIngredientRequest(const char * ingredient_request) {
           }
         }
         Serial.println(safe_name);
-        save_name_if_different(booze_positions[idx++], safe_name);
+        save_name_if_different(booze_positions[idx++] - 1, safe_name);// - 1 for zero-indexing
       }
-      tok = strtok(NULL, "p=&");
+      tok = strtok(NULL, "=&");
     }
+    httpReply = http_OK;
   } else {//Get an ingredients list from arduino
     Serial.println("Getting ingredients!");
+    httpReply = http_OK;
+    httpReply.concat("{\"ingredients\": [");
+    for (int ii = 0; ii < NUM_INGREDIENTS; ii++) {
+      httpReply.concat("{\"position\": ");
+      httpReply.concat(ii + 1);
+      httpReply.concat(",\"name\": \"");
+      httpReply.concat(ingredients[ii]);
+      httpReply.concat("\"}");
+      if (ii != NUM_INGREDIENTS - 1) {
+        httpReply.concat(",");
+      }
+    }
+    httpReply.concat("]}\n\n");
+    Serial.println(httpReply);
   }
 }
 
@@ -655,6 +712,9 @@ void analyzeIngredientRequest(const char * ingredient_request) {
 //GET /ingredients?p1=vodka&...
 //For making a drink:
 //GET /drinks/make?p1=1.0&p5=0.5&...
+//
+//Post-Condition: This function, and any functions it calls, are 
+//responsible for setting httpReply to a sensible value before returning.
 void analyzeGetRequest(const char * httpRequest) {
   Serial.println("Reprinting request:");
   Serial.println(httpRequest);
@@ -663,13 +723,19 @@ void analyzeGetRequest(const char * httpRequest) {
   char * drink_request = strstr(httpRequest, "GET /drinks/make?");
   if (drink_request) {
     analyzeDrinkRequest(drink_request);
+    return;
   }
 
   char * ingredient_request = strstr(httpRequest, "GET /ingredients");
   if (ingredient_request) {
     analyzeIngredientRequest(ingredient_request);
+    return;
   }
-  
+
+  //If we got here, the request was malformed by the time we got to analyze it
+  httpReply = http_ERROR;
+  httpReply.concat(__FUNCTION__);
+  httpReply.concat("() - no matching URL was recognized\n\n");
 }
 
 
@@ -692,6 +758,10 @@ void serverDemo()
     
     if (found_string) {
       analyzeGetRequest(found_string);
+    } else {
+      httpReply = http_ERROR;
+      httpReply.concat(__FUNCTION__);
+      httpReply.concat("() - no found_string!\n\n");
     }
 
     //Reply
