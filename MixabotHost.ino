@@ -12,14 +12,15 @@
 
 // handle diagnostic informations given by assertion and abort program execution:
 void __assert(const char *__func, const char *__file, int __lineno, const char *__sexp) {
-    // transmit diagnostic informations through serial link. 
-    Serial.println(__func);
-    Serial.println(__file);
-    Serial.println(__lineno, DEC);
-    Serial.println(__sexp);
-    Serial.flush();
-    // abort program execution.
-    abort();
+  Serial.println("ASSERTION FAILURE");
+  // transmit diagnostic informations through serial link. 
+  Serial.println(__func);
+  Serial.println(__file);
+  Serial.println(__lineno, DEC);
+  Serial.println(__sexp);
+  Serial.flush();
+  // abort program execution.
+  abort();
 }
 
 // Connect a stepper motor with 200 steps per revolution (1.8 degree)
@@ -43,7 +44,7 @@ const double NORMAL_ACCELERATION = 200.0;
 
 const int IR_SENSOR_THRESHOLD = 512;
 
-
+#define DISABLE_MOTORS 1
 
 enum {
   EEPROM_INGREDIENT_NAME_SIZE = 32,
@@ -57,8 +58,10 @@ char ingredients[NUM_INGREDIENTS][EEPROM_INGREDIENT_NAME_SIZE] = {0};
 //////////////////////////////
 // Replace these two character strings with the name and
 // password of your WiFi network.
-const char mySSID[] = "HOME-C129-5";
-const char myPSK[] = "HarrisonNelson1";
+//const char mySSID[] = "HOME-C129-5";
+//const char myPSK[] = "HarrisonNelson1";
+const char mySSID[] = "BG_Mixed";
+const char myPSK[] = "uptotheelbow";
 
 
 ESP8266Server server = ESP8266Server(80);
@@ -154,31 +157,44 @@ unsigned int bottle_position_nsteps[6] = {
 
 
 void load_name_from_eeprom(int idx) {
-  assert(idx < NUM_INGREDIENTS);
+  assert(idx <= NUM_INGREDIENTS);
   for (int ii = 0; ii < EEPROM_INGREDIENT_NAME_SIZE; ii++) {
     ingredients[idx][ii] = EEPROM[idx*EEPROM_INGREDIENT_NAME_SIZE + ii];
   }
 }
 
 void store_name_to_eeprom(int idx) {
-  assert(idx < NUM_INGREDIENTS);
+  assert(idx <= NUM_INGREDIENTS);
   for (int ii = 0; ii < EEPROM_INGREDIENT_NAME_SIZE; ii++) {
     EEPROM[idx*EEPROM_INGREDIENT_NAME_SIZE + ii] = ingredients[idx][ii];
   }
 }
 
 void save_name_if_different(int idx, char * new_name) {
+  assert(idx <= NUM_INGREDIENTS);
+
+  //No matter what, update our local RAM copy
+  strncpy(ingredients[idx], new_name, EEPROM_INGREDIENT_NAME_SIZE - 1);
+  ingredients[idx][EEPROM_INGREDIENT_NAME_SIZE - 1] = '\0';
+  int ingredient_length = strlen(ingredients[idx]);
   bool different = false;
-  for (int ii = 0; ii < EEPROM_INGREDIENT_NAME_SIZE; ii++) {
+  
+  Serial.print("Checking position ");
+  Serial.print(idx);
+  Serial.print(" to see if it's different from ");
+  Serial.println(new_name);
+  
+  for (int ii = 0; ii < EEPROM_INGREDIENT_NAME_SIZE && ii < ingredient_length; ii++) {
     if (ingredients[idx][ii] != EEPROM[idx*EEPROM_INGREDIENT_NAME_SIZE + ii]) {
       different = true;
     }
   }
 
   if (different) {
-    strncpy(ingredients[idx], new_name, EEPROM_INGREDIENT_NAME_SIZE - 1);
-    ingredients[idx][EEPROM_INGREDIENT_NAME_SIZE - 1] = '\0';
+    Serial.println("it is! Storing the new name");
     store_name_to_eeprom(idx);
+  } else {
+    Serial.println("it's not. Doing nothing. ");
   }
 }
 
@@ -246,24 +262,14 @@ void do_safe_x_motor_move(int pos) {
       
     Serial.print("PRE_MOVE distanceToGo: ");
     Serial.println(x_motor_profile.distanceToGo());
-//    bool direction = pos > stepper_position;
 
     int counter = 0;
     int distanceToGo = x_motor_profile.distanceToGo();
     while (home_safe && x_motor_profile.distanceToGo() != 0/*stepper_position != pos*/) {
       runMotor(X_MOTOR, 0, 0);
-//      x_motor->step(1, direction ? FORWARD : BACKWARD, DOUBLE);
       home_safe = digitalRead(csw_x_motion_pin);
       hit_hall = !digitalRead(hall_sensor_pin);
       counter++;
-//      stepper_position += direction ? 1 : -1;
-//      int distance = x_motor_profile.distanceToGo();
-//      if (distance != distanceToGo) {
-//        Serial.print("New distance to go: ");
-//        Serial.println(x_motor_profile.distanceToGo());
-//        Serial.print("At counter ");
-//        Serial.println(counter);
-//      }
     }
 
     Serial.print("AFTER MOVE distanceToGo: ");
@@ -297,6 +303,12 @@ void do_safe_x_motor_move(int pos) {
 }
 
 void do_homing() {
+  if (DISABLE_MOTORS) {
+    Serial.println("Faking being home...");
+    homing_complete = false;
+    stepper_position = 0;
+    return;
+  }
   if (!homing_complete) {
     Serial.println("Homing...");
     if (digitalRead(csw_x_motion_pin)) {
@@ -307,7 +319,7 @@ void do_homing() {
     }
     Serial.println("Homing Complete!");
     stepper_position = 0;
-    homing_complete = 1;
+    homing_complete = true;
     panic_stop(0);
     x_motor_profile.moveTo(10);
     while (x_motor_profile.distanceToGo() != 0) {
@@ -349,19 +361,18 @@ void pour(double portion) {
   Serial.println("Starting pour");
     while (portion > 0.0) {
       // Pourer motor calibrates
-        while (digitalRead(csw_z_motion_pin)) {
-            runMotor(POURER_MOTOR, 15, FORWARD);//pourer_motor->step(15, FORWARD, DOUBLE);
-//            Serial.println("Pourer Calibrate");
-        }
-        Serial.println("Pouring...");
-        delay(1000 * (int)fmin(FULL_POUR_DURATION, (portion * FULL_POUR_DURATION)));//Pour for either a full shot or the fraction of a shot that remains
-        portion -= 1.0;//Always step down by whole shots, no problem going negative
+      while (digitalRead(csw_z_motion_pin)) {
+          runMotor(POURER_MOTOR, 15, FORWARD);//pourer_motor->step(15, FORWARD, DOUBLE);
+      }
+      Serial.println("Pouring...");
+      delay(1000 * (int)fmin(FULL_POUR_DURATION, (portion * FULL_POUR_DURATION)));//Pour for either a full shot or the fraction of a shot that remains
+      portion -= 1.0;//Always step down by whole shots, no problem going negative
 
-        Serial.println("Backing off...");
-        runMotor(POURER_MOTOR, POURER_BACKOFF_STEPS, BACKWARD);//pourer_motor->step(POURER_BACKOFF_STEPS, BACKWARD, DOUBLE);
-        if (portion > 0.0) {//More than 1 shot requested, let the chamber fill back up before we pour again
-            delay(1000 * (int)fmin(CHAMBER_REFILL_DURATION, (portion * CHAMBER_REFILL_DURATION)));
-        }
+      Serial.println("Backing off...");
+      runMotor(POURER_MOTOR, POURER_BACKOFF_STEPS, BACKWARD);//pourer_motor->step(POURER_BACKOFF_STEPS, BACKWARD, DOUBLE);
+      if (portion > 0.0) {//More than 1 shot requested, let the chamber fill back up before we pour again
+          delay(1000 * (int)fmin(CHAMBER_REFILL_DURATION, (portion * CHAMBER_REFILL_DURATION)));
+      }
     }
 
     pourer_motor->release();
@@ -369,6 +380,10 @@ void pour(double portion) {
 
 // Create a drink based on positions of 4 potential mixes
 void dispenseIngredients(int *booze_positions, float *amounts, int num_ingredients) {
+  if (DISABLE_MOTORS) {
+    Serial.println("Motors are disabled");
+    return;
+  }
   if (analogRead(ir_sensor_pin) > IR_SENSOR_THRESHOLD) {
     lcd.print("Feed me a glass!");
     Serial.println("Feed me a glass!");
@@ -398,21 +413,12 @@ void runMotor(int mid, int nsteps, int direction) {
   if (X_MOTOR == mid) {
     x_motor_profile.run();
   } else if (POURER_MOTOR == mid) {
-//  pourer_motor_profile.run()
     pourer_motor->step(nsteps, direction, DOUBLE);
   } else if (NO_MOTOR == mid) {
     //Do nothing
   } else {
     Serial.println("What other motor are you running????");
   }
-/*
-  if (NO_MOTOR == mid) {
-    serverCheck(WEBSERVER_SLOW_TIMEOUT_MSEC);
-  } else if (global_step_counter % WEBSERVER_TIMELINESS_CONST == 0) {
-    serverCheck(WEBSERVER_FAST_TIMEOUT_MSEC);
-  } else {
-    //Do nothing with the server this step
-  }*/
 
   global_step_counter++;
 }
@@ -551,46 +557,6 @@ void serverSetup()
   Serial.println(esp8266.localIP());
   Serial.println();
 }
-/*
-void analyzeDrinkRequest(const char * drinkRequest) {
-}
-
-void analyzeIngredientPut(const char * ingredientPut) {
-  char token[4] = "p1=";
-  char ingredient_name[EEPROM_INGREDIENT_NAME_SIZE] = {0};
-
-  for (int ii = 0; ii < NUM_INGREDIENTS; ii++) {
-    token[1] = '1' + ii;
-    char * ingredient = strstr(ingredientPut, token);
-    if (ingredient) {
-      ingredient += sizeof(token) - 1;
-      char * string_end = strstr(ingredient, "&");
-      if (!string_end) {
-        string_end = strstr(ingredient, "\n");
-      }
-      if (string_end) {
-        strncpy(ingredient_name, ingredient, min(sizeof(ingredient_name) - 1, string_end - ingredient));
-        ingredient_name[sizeof(ingredient_name)-1] = 0;
-        Serial.print("Replacing position ");
-        Serial.print(ii+1);
-        Serial.print(" with the ingredient ");
-        Serial.println(ingredient_name);
-        save_name_if_different(ii, ingredient_name);
-      }
-    }
-  }
-}
-
-void analyzePutIngredient(const char * putIngredient) {
-  assert(putIngredient);
-  
-  Serial.print("PUT request: ");
-  Serial.println(putIngredient);
-
-  char * token = strtok(putIngredient, "/");
-
-  
-}*/
 
 void analyzeDrinkRequest(const char * drinkRequest) {
   char * url = strstr(drinkRequest, "?");
@@ -616,68 +582,97 @@ void analyzeDrinkRequest(const char * drinkRequest) {
       amounts[idx++] = val;
       
     }
-    tok = strtok(NULL, "p=&");
+    tok = strtok(NULL, "p=& ");
   }
 
   dispenseIngredients(booze_positions, amounts, idx);
 }
 
 void analyzeIngredientRequest(const char * ingredient_request) {
-  char * set_ingredient = strstr(ingredient_request, "GET /ingredients/p");
+  char * set_ingredient = strstr(ingredient_request, "GET /ingredients?p");
   if (set_ingredient) {
-    Serial.println("Setting ingredient!");
-    set_ingredient = strstr(ingredient_request, "p");
-    char * ingredient_name;
-    int ingredient_position = strtol(set_ingredient + 1, &ingredient_name, 10);//p4, p10, etc...
-    if (ingredient_position != 0 && ingredient_position >= 1 && ingredient_position <= NUM_INGREDIENTS) {
-      ingredient_name++;//p1=vodka, etc...
-      char ingredient_name_safe[EEPROM_INGREDIENT_NAME_SIZE];
-      strncpy(ingredient_name_safe, ingredient_name, EEPROM_INGREDIENT_NAME_SIZE - 1);
-      ingredient_name_safe[EEPROM_INGREDIENT_NAME_SIZE - 1] = '\0';
-      Serial.print("Setting position ");
-      Serial.print(ingredient_position);
-      Serial.print(" to ingredient ");
-      Serial.println(ingredient_name_safe);
-      save_name_if_different(ingredient_position, ingredient_name_safe);
-    } else {
-      Serial.println("Illegal ingredient position:");
-      Serial.println(ingredient_request);
-      //FIXME finish
+    Serial.println("Setting ingredients!");
+    char * url = strstr(ingredient_request, "?");
+    url++;//skip the question mark
+    char * end_of_line = strstr(url, "\n");
+    if (!end_of_line) {
+      Serial.println("Got an HTTP request without a newline, bailing...");
+      return;
+    }
+    end_of_line[1] = '\0';//Don't let further string functions search past the newline
+    char * HTTP_version = strstr(url, " HTTP");
+    if (HTTP_version) {
+      HTTP_version[0] = '\0';//Cut off the HTTP version if it exists.
+    }
+    char * tok = strtok(url, "p=&");
+    int token_num = 0;
+    int booze_positions[NUM_INGREDIENTS] = {0};
+    char * names[NUM_INGREDIENTS] = {NULL};
+    char safe_name[EEPROM_INGREDIENT_NAME_SIZE*3] = {0};//Since every "character" can be a space, which translates to %20 in a URL. Ugh.
+    int idx = 0;
+    while (tok) {
+      if (token_num++ %2 == 0) {
+        int val = atoi(tok);
+        Serial.print("Setting position ");
+        Serial.print(val);
+        Serial.print(" to ");
+        booze_positions[idx] = val;
+      } else {
+        strncpy(safe_name, tok, EEPROM_INGREDIENT_NAME_SIZE*3 - 1);
+        //Change %20 to space
+        char * percent_twenty = strstr(safe_name, "%20");
+        int number_spaces = 0;
+        while (percent_twenty) {
+          percent_twenty[0] = ' ';
+          number_spaces++;
+          while (percent_twenty[3]) {//As long as there's another character, move the string up
+            percent_twenty[1] = percent_twenty[3];
+            percent_twenty++;
+          }
+          percent_twenty = strstr(safe_name, "%20");
+        }
+        if (number_spaces != 0) {
+          //Cut off the end of this string that's now garbage
+          int last_char = strlen(safe_name);
+          last_char -= number_spaces*2;
+          if (last_char > 0) {
+            safe_name[last_char] = '\0';
+          }
+        }
+        Serial.println(safe_name);
+        save_name_if_different(booze_positions[idx++], safe_name);
+      }
+      tok = strtok(NULL, "p=&");
     }
   } else {//Get an ingredients list from arduino
-    
+    Serial.println("Getting ingredients!");
   }
 }
 
+//For getting a list of ingredients:
+//GET /ingredients
+//For setting an ingredient:
+//GET /ingredients?p1=vodka&...
+//For making a drink:
+//GET /drinks/make?p1=1.0&p5=0.5&...
 void analyzeGetRequest(const char * httpRequest) {
   Serial.println("Reprinting request:");
   Serial.println(httpRequest);
   Serial.println("Request END");
+  
   char * drink_request = strstr(httpRequest, "GET /drinks/make?");
   if (drink_request) {
     analyzeDrinkRequest(drink_request);
-//    martini();
-//    homing_complete = false;//Go back home now.
-//    Serial.println("Found a drink request!");
-//    drink_request = strstr(drink_request, "?");
-//    Serial.println(drink_request+1);
   }
-//  char * ingredient_put = strstr(httpRequest, "PUT /ingredients/p");
-//  if (ingredient_put) {
-//    analyzeIngredientPut(ingredient_put);
-//  }
 
   char * ingredient_request = strstr(httpRequest, "GET /ingredients");
   if (ingredient_request) {
     analyzeIngredientRequest(ingredient_request);
   }
+  
 }
 
 
-//For getting a list of ingredients:
-//GET /ingredients
-//For setting an ingredient:
-//GET /ingredients/p1=vodka
 
 void serverDemo()
 {
@@ -693,78 +688,22 @@ void serverDemo()
     Serial.println("Client Connected!");
     // an http request ends with a blank line
     boolean currentLineIsBlank = true;
-    //while (client.connected()) 
-    //{
-      char * found_string = client.searchBuffer("");
-      if (found_string) {
-        analyzeGetRequest(found_string);
-      }
+    char * found_string = client.searchBuffer("");
+    
+    if (found_string) {
+      analyzeGetRequest(found_string);
+    }
 
-      //Reply
-      client.print(httpReply);
-      /*
-      if (client.available()) 
-      {
-        char c = client.read();
-        // if you've gotten to the end of the line (received a newline
-        // character) and the line is blank, the http request has ended,
-        // so you can send a reply
-        if (c == '\n' && currentLineIsBlank) 
-        {
-          Serial.println(F("Sending HTML page"));
-          Serial.println(F("Here's the GET request:"));
-          getRequest[sizeof(getRequest) - 1] = 0;
-//          Serial.println(getRequest);
-          analyzeGetRequest();
-          getRequestIndex = 0;
-          // send a standard http response header:
-          client.print(htmlHeader);
-          String htmlBody;
-          // output the value of each analog input pin
-          for (int a = 0; a < 6; a++)
-          {
-            htmlBody += "A";
-            htmlBody += String(a);
-            htmlBody += ": ";
-            htmlBody += String(analogRead(a));
-            htmlBody += "<br>\n";
-          }
-          htmlBody += "time: ";
-          htmlBody += String(millis());
-          htmlBody += "<br>\n";
-          htmlBody += "NBytes: ";
-          htmlBody += String(getRequestIndex);
-          htmlBody += "<br>\n";
-          htmlBody += "Received: ";
-          htmlBody += getRequest;
-          htmlBody += "<br>\n";
-          htmlBody += "</html>\n";
-          client.print(htmlBody);
-          memset(getRequest, 0, sizeof(getRequest));
-          break;
-        }
-        getRequest[getRequestIndex++] = c;
-        if (getRequestIndex >= sizeof(getRequest)) {
-          getRequestIndex = 0;
-        }
-        if (c == '\n') 
-        {
-          // you're starting a new line
-          currentLineIsBlank = true;
-        }
-        else if (c != '\r') 
-        {
-          // you've gotten a character on the current line
-          currentLineIsBlank = false;
-        }
-      }*/
-    //}
+    //Reply
+    client.print(httpReply);
+      
     // give the web browser time to receive the data
     delay(100);
     
     // close the connection:
     client.stop();
     Serial.println(F("Client disconnected"));
+    delay(20000);
   }
   
 }
