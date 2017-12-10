@@ -559,6 +559,10 @@ void analyzeDrinkRequest(const char * drinkRequest) {
   url++;//skip the question mark
   char * end_of_line = strstr(url, "\n");
   end_of_line[1] = '\0';
+  char * HTTP_version = strstr(url, " HTTP");
+  if (HTTP_version) {
+    HTTP_version[0] = '\0';//Cut off the HTTP version if it exists.
+  }
   char * tok = strtok(url, "p=&");
   int token_num = 0;
   int booze_positions[NUM_INGREDIENTS] = {0};
