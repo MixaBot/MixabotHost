@@ -33,7 +33,8 @@ void __assert(const char *__func, const char *__file, int __lineno, const char *
 int homing_complete = 0;
 int csw_x_motion_pin = 22;
 int stepper_position = 0;
-int csw_z_motion_pin = 23;
+int csw_z_motion_upper_pin = 23;
+int csw_z_motion_lower_pin = 24;
 int hall_sensor_pin = 41;
 int ir_sensor_pin = A8;
 
@@ -46,7 +47,7 @@ const double NORMAL_ACCELERATION = 200.0;
 
 const int IR_SENSOR_THRESHOLD = 512;
 
-#define DISABLE_MOTORS 1
+#define DISABLE_MOTORS 0
 
 enum {
   EEPROM_INGREDIENT_NAME_SIZE = 32,
@@ -60,8 +61,8 @@ char ingredients[NUM_INGREDIENTS][EEPROM_INGREDIENT_NAME_SIZE] = {0};
 //////////////////////////////
 // Replace these two character strings with the name and
 // password of your WiFi network.
-//const char mySSID[] = "HOME-C129-5";
-//const char myPSK[] = "HarrisonNelson1";
+//const char mySSID[] = "WestColeman-2.4_EXT";
+//const char myPSK[] = "HannaLouise1";
 const char mySSID[] = "BG_Mixed";
 const char myPSK[] = "uptotheelbow";
 
@@ -143,12 +144,12 @@ void runMotor(/*enum motor_id*/int mid, int nsteps, int direction);
 
 //200 steps per rev, 66mm per rev, ~10cm between bottles
 unsigned int bottle_position_nsteps[6] = {
-    (3),
-    280,//(10) + ((10 * 10 * 200) / 66),
-    560,//(10) + ((20 * 10 * 200) / 66),
-    840,//(10) + ((30 * 10 * 200) / 66),
-    1120,//(10) + ((40 * 10 * 200) / 66),
-    1525,//(10) + ((50 * 10 * 200) / 66),
+    20,
+    187,
+    354,
+    521,
+    688,
+    855,
     };
 
 
@@ -357,7 +358,7 @@ void pour(double portion) {
   Serial.println("Starting pour");
     while (portion > 0.0) {
       // Pourer motor calibrates
-      while (digitalRead(csw_z_motion_pin)) {
+      while (digitalRead(csw_z_motion_upper_pin)) {
           runMotor(POURER_MOTOR, 15, FORWARD);//pourer_motor->step(15, FORWARD, DOUBLE);
       }
       Serial.println("Pouring...");
@@ -365,7 +366,10 @@ void pour(double portion) {
       portion -= 1.0;//Always step down by whole shots, no problem going negative
 
       Serial.println("Backing off...");
-      runMotor(POURER_MOTOR, POURER_BACKOFF_STEPS, BACKWARD);//pourer_motor->step(POURER_BACKOFF_STEPS, BACKWARD, DOUBLE);
+      while (digitalRead(csw_z_motion_lower_pin)) {
+        runMotor(POURER_MOTOR, 15, BACKWARD);//pourer_motor->step(POURER_BACKOFF_STEPS, BACKWARD, DOUBLE);
+      }
+      
       if (portion > 0.0) {//More than 1 shot requested, let the chamber fill back up before we pour again
           delay(1000 * (int)fmin(CHAMBER_REFILL_DURATION, (portion * CHAMBER_REFILL_DURATION)));
       }
