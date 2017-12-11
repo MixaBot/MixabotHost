@@ -314,6 +314,9 @@ void do_homing() {
         runMotor(X_MOTOR, 0, 0);
       }
     }
+    while (digitalRead(csw_z_motion_lower_pin)) {
+      runMotor(POURER_MOTOR, 15, BACKWARD);//pourer_motor->step(POURER_BACKOFF_STEPS, BACKWARD, DOUBLE);
+    }
     Serial.println("Homing Complete!");
     stepper_position = 0;
     homing_complete = true;
