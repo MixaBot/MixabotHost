@@ -105,11 +105,11 @@ Adafruit_StepperMotor *pourer_motor = AFMS.getStepper(200, 1);
 
 //Wrapper functions to support accel stepping
 void x_motor_forward_step() {
-  x_motor->onestep(FORWARD, DOUBLE);
+  x_motor->onestep(BACKWARD, DOUBLE);//This motor got reversed
 }
 
 void x_motor_backward_step() {
-  x_motor->onestep(BACKWARD, DOUBLE);
+  x_motor->onestep(FORWARD, DOUBLE);//This motor got reversed
 }
 
 void pourer_motor_forward_step() {
