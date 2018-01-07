@@ -309,10 +309,13 @@ void do_homing() {
   if (!homing_complete) {
     Serial.println("Homing...");
     if (digitalRead(csw_x_motion_pin)) {
+      float old_max_speed = x_motor_profile.maxSpeed();
+      x_motor_profile.setMaxSpeed(old_max_speed / 2.0);
       x_motor_profile.moveTo(-10000000);
       while (digitalRead(csw_x_motion_pin)) {
         runMotor(X_MOTOR, 0, 0);
       }
+      x_motor_profile.setMaxSpeed(old_max_speed);
     }
     while (digitalRead(csw_z_motion_lower_pin)) {
       runMotor(POURER_MOTOR, 15, BACKWARD);//pourer_motor->step(POURER_BACKOFF_STEPS, BACKWARD, DOUBLE);
