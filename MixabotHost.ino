@@ -126,15 +126,6 @@ AccelStepper x_motor_profile(x_motor_forward_step, x_motor_backward_step);
 AccelStepper pourer_motor_profile(pourer_motor_forward_step, pourer_motor_backward_step);
 
 
-typedef enum bottle_pos{
-    BOTTLE_POS_1,
-    BOTTLE_POS_2,
-    BOTTLE_POS_3,
-    BOTTLE_POS_4,
-    BOTTLE_POS_5,
-    BOTTLE_POS_6,
-} BottlePosition;
-
 enum motor_id {
   X_MOTOR,
   POURER_MOTOR,
@@ -143,13 +134,17 @@ enum motor_id {
 void runMotor(/*enum motor_id*/int mid, int nsteps, int direction);
 
 //200 steps per rev, 66mm per rev, ~10cm between bottles
-unsigned int bottle_position_nsteps[6] = {
+unsigned int bottle_position_nsteps[NUM_INGREDIENTS] = {
     20,
     187,
     354,
     521,
     688,
     855,
+    20,//FIXME chris
+    20,
+    20,
+    20,
     };
 
 
