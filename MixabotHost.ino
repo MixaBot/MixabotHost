@@ -650,7 +650,7 @@ void analyzeIngredientRequest(const char * ingredient_request) {
     while (tok) {
       if (token_num++ %2 == 0) {
         int val = atoi(tok+1);//don't try to use the p in p1, p3, p10, etc...
-        if (val < 1 || val > NUM_INGREDIENTS) {
+        if (val < 0 || val > NUM_INGREDIENTS) {//FIXME return this to 1 and fix line 667
           Serial.print("Tried to parse nonsensical store ingredient position ");
           Serial.println(val);
           Serial.print("From original string ");
@@ -664,6 +664,7 @@ void analyzeIngredientRequest(const char * ingredient_request) {
           httpReply.concat("\n\n");
           return;
         }
+        val += 1;//FIXME remove this and fix line 653
         Serial.print("Setting position ");
         Serial.print(val);
         Serial.print(" to ");
