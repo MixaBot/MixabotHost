@@ -1,9 +1,9 @@
+#include <Adafruit_LiquidCrystal.h>
 #include <SparkFunESP8266WiFi.h>
 #include <Adafruit_MotorShield.h>
 #include "utility/Adafruit_MS_PWMServoDriver.h"
 #include <Wire.h>
 #include <AccelStepper.h>
-#include <LiquidCrystal.h>
 #include <EEPROM.h>
 
 #define __ASSERT_USE_STDERR
@@ -97,8 +97,8 @@ String httpReply = http_OK;
 
 // initialize the library by associating any needed LCD interface pin
 // with the arduino pin number it is connected to
-const int rs = 26, en = 28, d4 = 30, d5 = 32, d6 = 34, d7 = 36;
-LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
+const int I2C_LCD_address = 0;
+Adafruit_LiquidCrystal lcd(I2C_LCD_address);
                            
 Adafruit_MotorShield AFMS = Adafruit_MotorShield(); // Creates the motorshield object
 Adafruit_StepperMotor *x_motor= AFMS.getStepper(200, 2);
@@ -141,10 +141,10 @@ unsigned int bottle_position_nsteps[NUM_INGREDIENTS] = {
     521,
     688,
     855,
-    20,//FIXME chris
-    20,
-    20,
-    20,
+    1022,
+    1189,
+    1356,
+    1523,
     };
 
 
@@ -511,6 +511,8 @@ void displayConnectInfo()
   // ESP8266's current local IP address.
   IPAddress myIP = esp8266.localIP();
   Serial.print(F("My IP: ")); Serial.println(myIP);
+  lcd.println(F("My IP: "));
+  lcd.print(myIP);
 }
 
 void clientDemo()
