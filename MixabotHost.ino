@@ -230,10 +230,10 @@ Serial.flush();
   // and the network it's connected to.
   displayConnectInfo();
 
-  serialTrigger(F("Press any key to connect client."));
+//  serialTrigger(F("Press any key to connect client."));
   clientDemo();
   
-  serialTrigger(F("Press any key to test server."));
+//  serialTrigger(F("Press any key to test server."));
   serverSetup();
 
   do_homing();
