@@ -398,10 +398,8 @@ void dispenseIngredients(int *booze_positions, float *amounts, int num_ingredien
   //x_motor_profile.enableOutputs();
   int idx = 0; 
   for (idx = 0; idx < num_ingredients; idx++) {
-    if ((booze_positions[idx]-1) != 6) {
-      go_to_position(booze_positions[idx] - 1);
-      pour(amounts[idx]);
-    }
+    go_to_position(booze_positions[idx] - 1);
+    pour(amounts[idx]);
   }
 
   homing_complete = false;
