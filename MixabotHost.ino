@@ -217,7 +217,7 @@ Serial.flush();
   pourer_motor_profile.setMaxSpeed(2000);
   pourer_motor_profile.setAcceleration(NORMAL_ACCELERATION);
   
-  serialTrigger(F("Press any key to begin."));
+//  serialTrigger(F("Press any key to begin."));
 
   // initializeESP8266() verifies communication with the WiFi
   // shield, and sets it up.
