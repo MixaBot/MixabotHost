@@ -1,4 +1,4 @@
-#include <Adafruit_LiquidCrystal.h>
+#include <LiquidCrystal_I2C.h>
 #include <SparkFunESP8266WiFi.h>
 #include <Adafruit_MotorShield.h>
 #include "utility/Adafruit_MS_PWMServoDriver.h"
@@ -61,10 +61,10 @@ char ingredients[NUM_INGREDIENTS][EEPROM_INGREDIENT_NAME_SIZE] = {0};
 //////////////////////////////
 // Replace these two character strings with the name and
 // password of your WiFi network.
-//const char mySSID[] = "WestColeman-2.4_EXT";
-//const char myPSK[] = "HannaLouise1";
-const char mySSID[] = "BG_Mixed";
-const char myPSK[] = "uptotheelbow";
+const char mySSID[] = "WestColeman-2.4_EXT";
+const char myPSK[] = "HannaLouise1";
+//const char mySSID[] = "BG_Mixed";
+//const char myPSK[] = "uptotheelbow";
 
 
 ESP8266Server server = ESP8266Server(80);
@@ -97,8 +97,8 @@ String httpReply = http_OK;
 
 // initialize the library by associating any needed LCD interface pin
 // with the arduino pin number it is connected to
-const int I2C_LCD_address = 0;
-Adafruit_LiquidCrystal lcd(I2C_LCD_address);
+const int I2C_LCD_address = 0x27;
+LiquidCrystal_I2C lcd(I2C_LCD_address,16,2); // set the LCD address to 0x27 for a 16 chars and 2 line 
                            
 Adafruit_MotorShield AFMS = Adafruit_MotorShield(); // Creates the motorshield object
 Adafruit_StepperMotor *x_motor= AFMS.getStepper(200, 2);
@@ -203,11 +203,10 @@ Serial.flush();
   pinMode(A8, INPUT);
   pinMode(hall_sensor_pin, INPUT);
 
-  // set up the LCD's number of columns and rows:
-  lcd.begin(16, 2);
-  // Startup message.
-  lcd.print("SirMixabot!");
-
+  lcd.begin(); //initialize the lcd
+  lcd.backlight(); //open the backlight 
+  lcd.clear();//Position at top left corner
+  lcd.println("LCD is working");
   load_all_names();
   
   // Setup the motors
@@ -305,8 +304,9 @@ void do_homing() {
     Serial.println("Homing...");
     Serial.println("Z first...");
     while (digitalRead(csw_z_motion_lower_pin)) {
-      runMotor(POURER_MOTOR, 15, BACKWARD);//pourer_motor->step(POURER_BACKOFF_STEPS, BACKWARD, DOUBLE);
+      runMotor(POURER_MOTOR, 15, BACKWARD);
     }
+    pourer_motor->release();
     Serial.println("Then X...");
     if (digitalRead(csw_x_motion_pin)) {
       float old_max_speed = x_motor_profile.maxSpeed();
