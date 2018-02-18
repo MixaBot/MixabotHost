@@ -512,7 +512,9 @@ void displayConnectInfo()
   // ESP8266's current local IP address.
   IPAddress myIP = esp8266.localIP();
   Serial.print(F("My IP: ")); Serial.println(myIP);
-  lcd.println(F("My IP: "));
+  lcd.clear();
+  lcd.print(F("My IP: "));
+  lcd.setCursor(0,1);//column 0, row 1
   lcd.print(myIP);
 }
 
@@ -746,6 +748,11 @@ void analyzeGetRequest(const char * httpRequest) {
   }
 
   //If we got here, the request was malformed by the time we got to analyze it
+  lcd.clear();
+  lcd.print("Drink Error");
+  lcd.setCursor(0,1);
+  lcd.print("Try again");
+  Serial.println("Couldn't find a valid app command in in the HTTP session!");
   httpReply = http_ERROR;
   httpReply.concat(__FUNCTION__);
   httpReply.concat("() - no matching URL was recognized\n\n");
@@ -760,6 +767,10 @@ void serverDemo()
   // available() has one parameter -- a timeout value. This
   // is the number of milliseconds the function waits,
   // checking for a connection.
+  lcd.clear();
+  lcd.print("Ready for a ");
+  lcd.setCursor(0,1);
+  lcd.print("drink request");
   ESP8266Client client = server.available(5000);
   
   if (client) 
@@ -772,6 +783,7 @@ void serverDemo()
     if (found_string) {
       analyzeGetRequest(found_string);
     } else {
+      Serial.println("No found_string!");
       httpReply = http_ERROR;
       httpReply.concat(__FUNCTION__);
       httpReply.concat("() - no found_string!\n\n");
@@ -786,7 +798,7 @@ void serverDemo()
     // close the connection:
     client.stop();
     Serial.println(F("Client disconnected"));
-    delay(20000);
+    delay(1000);
   }
   
 }
