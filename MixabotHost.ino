@@ -737,6 +737,10 @@ void analyzeGetRequest(const char * httpRequest) {
   
   char * drink_request = strstr(httpRequest, "GET /drinks/make?");
   if (drink_request) {
+    lcd.clear();
+    lcd.print("Making your ");
+    lcd.setCursor(0,1);
+    lcd.print("drink!");
     analyzeDrinkRequest(drink_request);
     return;
   }
