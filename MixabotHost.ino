@@ -6,6 +6,24 @@
 #include <AccelStepper.h>
 #include <EEPROM.h>
 
+#define X_MOTOR_REVERSED FALSE
+#if X_MOTOR_REVERSED
+#define MIXABOT_X_FORWARD FORWARD
+#define MIXABOT_X_BACKWARD BACKWARD
+#else
+#define MIXABOT_X_FORWARD BACKWARD
+#define MIXABOT_X_BACKWARD FORWARD
+#endif
+
+#define Z_MOTOR_REVERSED FALSE
+#if Z_MOTOR_REVERSED
+#define MIXABOT_Z_FORWARD FORWARD
+#define MIXABOT_Z_BACKWARD BACKWARD
+#else
+#define MIXABOT_Z_FORWARD BACKWARD
+#define MIXABOT_Z_BACKWARD FORWARD
+#endif
+
 #define __ASSERT_USE_STDERR
 #include <assert.h>
 
@@ -24,6 +42,8 @@ void __assert(const char *__func, const char *__file, int __lineno, const char *
   // abort program execution.
   abort();
 }
+
+
 
 // Connect a stepper motor with 200 steps per revolution (1.8 degree)
 // to motor port #2 (M3 and M4)
@@ -106,19 +126,19 @@ Adafruit_StepperMotor *pourer_motor = AFMS.getStepper(200, 1);
 
 //Wrapper functions to support accel stepping
 void x_motor_forward_step() {
-  x_motor->onestep(BACKWARD, DOUBLE);//This motor got reversed
+  x_motor->onestep(MIXABOT_X_FORWARD, DOUBLE);
 }
 
 void x_motor_backward_step() {
-  x_motor->onestep(FORWARD, DOUBLE);//This motor got reversed
+  x_motor->onestep(MIXABOT_X_BACKWARD, DOUBLE);
 }
 
 void pourer_motor_forward_step() {
-  pourer_motor->onestep(FORWARD, DOUBLE);
+  pourer_motor->onestep(MIXABOT_Z_FORWARD, DOUBLE);
 }
 
 void pourer_motor_backward_step() {
-  pourer_motor->onestep(BACKWARD, DOUBLE);
+  pourer_motor->onestep(MIXABOT_Z_BACKWARD, DOUBLE);
 }
 
 //Acceleration stepper objects. Use these instead of the raw motor objects to command controlled motions.
@@ -304,7 +324,7 @@ void do_homing() {
     Serial.println("Homing...");
     Serial.println("Z first...");
     while (digitalRead(csw_z_motion_lower_pin)) {
-      runMotor(POURER_MOTOR, 15, BACKWARD);
+      runMotor(POURER_MOTOR, 15, MIXABOT_Z_BACKWARD);
     }
     pourer_motor->release();
     Serial.println("Then X...");
@@ -363,7 +383,7 @@ void pour(double portion) {
     while (portion > 0.0) {
       // Pourer motor calibrates
       while (digitalRead(csw_z_motion_upper_pin)) {
-          runMotor(POURER_MOTOR, 15, FORWARD);//pourer_motor->step(15, FORWARD, DOUBLE);
+          runMotor(POURER_MOTOR, 15, MIXABOT_Z_FORWARD);//pourer_motor->step(15, FORWARD, DOUBLE);
       }
       Serial.println("Pouring...");
       delay(1000 * (int)fmin(FULL_POUR_DURATION, (portion * FULL_POUR_DURATION)));//Pour for either a full shot or the fraction of a shot that remains
@@ -371,7 +391,7 @@ void pour(double portion) {
 
       Serial.println("Backing off...");
       while (digitalRead(csw_z_motion_lower_pin)) {
-        runMotor(POURER_MOTOR, 15, BACKWARD);//pourer_motor->step(POURER_BACKOFF_STEPS, BACKWARD, DOUBLE);
+        runMotor(POURER_MOTOR, 15, MIXABOT_Z_BACKWARD);//pourer_motor->step(POURER_BACKOFF_STEPS, BACKWARD, DOUBLE);
       }
       
       if (portion > 0.0) {//More than 1 shot requested, let the chamber fill back up before we pour again
